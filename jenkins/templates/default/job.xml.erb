@@ -1,0 +1,105 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <scm class="hudson.plugins.git.GitSCM">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <name></name>
+        <refspec></refspec>
+        <url><%= @scm_url %></url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>**</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <disableSubmodules>false</disableSubmodules>
+    <recursiveSubmodules>false</recursiveSubmodules>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <authorOrCommitter>false</authorOrCommitter>
+    <clean>false</clean>
+    <wipeOutWorkspace>false</wipeOutWorkspace>
+    <pruneBranches>false</pruneBranches>
+    <remotePoll>false</remotePoll>
+    <ignoreNotifyCommit>false</ignoreNotifyCommit>
+    <useShallowClone>false</useShallowClone>
+    <buildChooser class="hudson.plugins.git.util.DefaultBuildChooser"/>
+    <gitTool>Default</gitTool>
+    <submoduleCfg class="list"/>
+    <relativeTargetDir></relativeTargetDir>
+    <reference></reference>
+    <excludedRegions></excludedRegions>
+    <excludedUsers></excludedUsers>
+    <gitConfigName></gitConfigName>
+    <gitConfigEmail></gitConfigEmail>
+    <skipTag>true</skipTag>
+    <includedRegions></includedRegions>
+    <scmName></scmName>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers class="vector">
+    <hudson.triggers.SCMTrigger>
+      <spec>* * * * *</spec>
+    </hudson.triggers.SCMTrigger>
+  </triggers>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.plugins.ruby.Ruby>
+      <command>$VERBOSE = false
+require &apos;rubygems&apos;
+require &apos;aws-sdk&apos;
+
+opsworks = AWS::OpsWorks.new().client
+own_instance_id = ENV[&apos;instance_id&apos;]
+
+$VERBOSE = false
+require &apos;rubygems&apos;
+require &apos;aws-sdk&apos;
+
+stack_id = opsworks.describe_instances(:instance_ids =&gt; [own_instance_id])[:instances][0][:stack_id]
+online_instance_ids = opsworks.describe_instances(:stack_id =&gt; stack_id)[:instances].select{|instance| instance[:status] == &apos;online&apos;}.map{|instance| instance[:instance_id]} - [own_instance_id]
+
+app_id = opsworks.describe_apps(:stack_id =&gt; stack_id)[:apps].detect{|app| name = app[:name].downcase.scan(/[a-z]+/).join == ENV[&apos;JOB_NAME&apos;]}[:app_id]
+
+app = opsworks.describe_apps(:app_ids =&gt; [app_id])[:apps][0]
+instances = opsworks.describe_instances(:stack_id =&gt; app[:stack_id])[:instances]
+instance_ids, instance_hostnames = [], []
+
+online_instances = opsworks.describe_instances(:stack_id =&gt; stack_id)[:instances].select do |instance|
+  instance[:status] == &apos;online&apos; &amp;&amp;
+  instance[:instance_id] != own_instance_id
+end
+
+if online_instances.any?
+  online_instances.each do |instance|
+    instance_ids &lt;&lt; instance[:instance_id]
+    instance_hostnames &lt;&lt; instance[:hostname]
+  end
+
+  puts &apos;deploying to&apos;
+  instance_hostnames.sort.each do |instance_hostname|
+  puts &quot;* #{instance_hostname}&quot;
+  end
+
+  deployment = opsworks.create_deployment(:stack_id =&gt; app[:stack_id], :app_id =&gt; app_id, :instance_ids =&gt; instance_ids, :command =&gt; {:name =&gt; &apos;deploy&apos;})
+
+  while (deployment = opsworks.describe_deployments(:deployment_ids =&gt; [deployment[:deployment_id]])[:deployments][0])[:status] == &apos;running&apos;
+    sleep 5
+  end
+  puts deployment[:status]
+else
+  puts &apos;no online instance, not deploying&apos;
+end</command>
+    </hudson.plugins.ruby.Ruby>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>
